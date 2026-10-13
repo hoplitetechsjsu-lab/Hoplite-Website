@@ -1,0 +1,55 @@
+#env
+.env
+.env.*
+!.env.example
+
+# Logs
+/logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vite
+
+# Supabase CLI local state
+supabase/.temp
+
+# Secrets / credentials (never commit)
+.env.local
+.env.*.local
+supabase/.env
+supabase/.env.*
+!supabase/.env.example
+supabase/.branches
+*.pem
+*.key
+*.p12
+*.pfx
+service-account*.json
+credentials*.json
+*secret*.json
+.dotenvx
+.env.keys
+
+# Test / tool output
+coverage
+functions-serve.log

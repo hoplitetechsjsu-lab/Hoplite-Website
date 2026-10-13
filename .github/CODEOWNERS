@@ -1,0 +1,18 @@
+# Update owners to an org team when available (e.g. @hoplitetechsjsu-lab/maintainers).
+# Enable "Require review from Code Owners" in branch protection (see MAINTAINERS.md).
+
+# Default owner for everything
+*                               @StanchPillow55
+
+# Backend: schema, RLS, grants, RPCs, Edge Functions, auth config. Extra scrutiny:
+# a mistake here can expose member data (student IDs, emails) or privileged actions.
+/supabase/                      @StanchPillow55
+/supabase/migrations/           @StanchPillow55
+/supabase/functions/            @StanchPillow55
+/supabase/config.toml           @StanchPillow55
+
+# CI, repo automation and security policy
+/.github/                       @StanchPillow55
+/scripts/                       @StanchPillow55
+/SECURITY.md                    @StanchPillow55
+/MAINTAINERS.md                 @StanchPillow55

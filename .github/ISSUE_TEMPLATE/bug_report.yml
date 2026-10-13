@@ -1,0 +1,58 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Do not post secrets, student IDs, or personal data.**
+        For security vulnerabilities, do **not** open an issue — see `SECURITY.md`.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local (supabase start + npm run dev)
+        - Hosted / production site
+        - CI
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Node, Supabase CLI, browser (e.g. Node 22.x, CLI 2.120, Chrome 130)
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Frontend
+        - Database / migrations / RLS
+        - Edge Functions
+        - Auth (email / Google OAuth)
+        - CI / tooling
+        - Docs
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Redact tokens, keys, emails, and student IDs. An `OPTIONS ... 404` from a function usually means it is not deployed.
+      render: shell

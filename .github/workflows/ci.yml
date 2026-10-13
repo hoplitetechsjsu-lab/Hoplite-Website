@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  # Supabase CLI >= 2.120 is required: older CLIs do not inject
+  # SUPABASE_PUBLISHABLE_KEYS / SUPABASE_SECRET_KEYS into the local Edge Runtime.
+  # Bump deliberately; do not use an older version here.
+  SUPABASE_CLI_VERSION: "latest"
+  DENO_VERSION: "v2.x"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Frontend: lint, typecheck (non-blocking for now), build, unit tests
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Dummy values: the build and the mocked unit tests never contact a backend.
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_dummy_key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck (non-blocking — known pre-existing errors)
+        # `tsc -p jsconfig.json` reports ~177 pre-existing errors, almost all from
+        # untyped JS shadcn/ui wrappers (forwardRef props typed as `RefAttributes<any>`)
+        # and `AuthLayout`'s required `footer` prop. See POST_MVP.md ("Typecheck debt").
+        # Output is still printed so regressions are visible. Remove
+        # `continue-on-error` once the error count reaches zero.
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Unit tests
+        run: npm run test:unit
+
+  # ---------------------------------------------------------------------------
+  # Database: migrations, seeds, lint, pgTAP
+  # ---------------------------------------------------------------------------
+  database:
+    name: database
+    runs-on: ubuntu-latest # Docker is preinstalled
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+      - run: supabase --version
+      - name: Start local Supabase
+        run: supabase start
+      - name: Reset database (migrations + seeds)
+        run: supabase db reset
+      - name: Lint database
+        run: supabase db lint --level warning --fail-on error
+      - name: pgTAP tests
+        run: supabase test db
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  # ---------------------------------------------------------------------------
+  # Edge Functions: Deno unit tests (mocked, no Docker)
+  # ---------------------------------------------------------------------------
+  edge-functions:
+    name: edge-functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Deno unit tests
+        run: npm run test:functions
+
+  # ---------------------------------------------------------------------------
+  # Edge Functions: HTTP integration tests against the local stack.
+  # Slower and more fragile (needs `functions serve`), so it is NOT in the
+  # recommended required-checks list yet. See MAINTAINERS.md.
+  # ---------------------------------------------------------------------------
+  edge-functions-http:
+    name: edge-functions-http
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: supabase --version
+      - name: Start local Supabase
+        run: supabase start
+      - name: Reset database (roles seed required)
+        run: supabase db reset
+      - name: Serve Edge Functions
+        run: |
+          nohup supabase functions serve > functions-serve.log 2>&1 &
+          # Wait until the runtime answers (any HTTP status means it is up).
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:54321/functions/v1/register-member || true)
+            if [ "$code" != "000" ] && [ "$code" != "502" ] && [ "$code" != "503" ]; then
+              echo "functions up (HTTP $code) after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "functions did not become ready"; cat functions-serve.log; exit 1
+      - name: HTTP integration tests
+        run: npm run test:functions:http
+      - name: Show function logs on failure
+        if: failure()
+        run: cat functions-serve.log || true
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
+
+  # ---------------------------------------------------------------------------
+  # Secret exposure guard (no install needed)
+  # ---------------------------------------------------------------------------
+  secret-exposure:
+    name: secret-exposure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for committed secrets / privileged keys
+        run: bash scripts/check-secret-exposure.sh
